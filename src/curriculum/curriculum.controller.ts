@@ -2,6 +2,12 @@ import { Controller, Get, Param, NotFoundException } from '@nestjs/common';
 import { CurriculumService } from './curriculum.service';
 
 @Controller('curriculum')
+/**
+ * Controller for managing curriculum and course information.
+ * 
+ * Provides endpoints to retrieve curriculum details by career code
+ * and course-specific information by course code.
+ */
 export class CurriculumController {
   constructor(private readonly curriculumService: CurriculumService) {}
 

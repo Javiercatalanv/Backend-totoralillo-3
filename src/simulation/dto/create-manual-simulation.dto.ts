@@ -1,4 +1,4 @@
-import { IsArray, IsEnum, IsInt, IsNotEmpty, IsString, Max, Min, ValidateNested } from 'class-validator';
+import {IsArray,IsEnum,IsInt,IsNotEmpty,IsOptional,IsString,Max,Min,ValidateNested,ArrayMinSize,ArrayNotEmpty,IsUUID,} from 'class-validator';
 import { Type } from 'class-transformer';
 
 export enum SemesterPeriod {
@@ -13,17 +13,19 @@ export class SemesterPlan {
   @Min(2020)
   year: number;
 
-  @IsEnum(SemesterPeriod)
+  @IsEnum(SemesterPeriod, {
+    message: 'El periodo debe ser uno de los siguientes: S1, S2, I, V',
+  })
   period: SemesterPeriod;
 
   @IsArray()
+  @ArrayNotEmpty()
   @IsString({ each: true })
-  courses: string[]; // Arreglo de códigos de ramos
+  courses: string[]; // Códigos de los cursos
 }
 
 export class CreateManualSimulationDto {
-  @IsString()
-  @IsNotEmpty()
+  @IsUUID('4', { message: 'studentId debe ser un UUID válido' })
   studentId: string;
 
   @IsString()
@@ -31,12 +33,19 @@ export class CreateManualSimulationDto {
   careerCode: string;
 
   @IsArray()
-  @ValidateNested({ each: true }) // Valida cada objeto del arreglo
-  @Type(() => SemesterPlan) // Le dice a class-validator qué clase usar
+  @ArrayMinSize(1)
+  @ValidateNested({ each: true })
+  @Type(() => SemesterPlan)
   manualPlan: SemesterPlan[];
 
   @IsInt()
-  @Min(20) // Minimo de créditos
-  @Max(80) // Limite de créditos, (modificar para los limites de credito del regalmento)
-  maxCreditsPerSemester: number; //Restricción de créditos
+  @Min(20)
+  @Max(80)
+  maxCreditsPerSemester: number;
+
+  // Opcional: lista de ramos reprobados simulados
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  simulatedFails?: string[];
 }
