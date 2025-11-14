@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
-import { Admin } from './admin.entity';
+import type { Admin } from './admin.entity';
 import { randomUUID } from 'crypto';
 
 @Injectable()
