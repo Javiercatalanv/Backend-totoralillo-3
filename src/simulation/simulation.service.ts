@@ -2,15 +2,18 @@ import { Injectable, BadRequestException } from '@nestjs/common';
 import { CreateManualSimulationDto, SemesterPlan } from './dto/create-manual-simulation.dto';
 import { ProgressService } from '../progress/progress.service';
 import { CurriculumService, Course, Curriculum } from '../curriculum/curriculum.service';
+import { logger } from '../common/logger/logger';
 
 @Injectable()
 export class SimulationService {
   constructor(
     private readonly progressService: ProgressService,
     private readonly curriculumService: CurriculumService,
-  ) {}
+  ) {logger.info('[SimulationService] Servicio inicializado.');}
 
   async generateManualProjection(dto: CreateManualSimulationDto) {
+    logger.info(`[SimulationService] Generando proyección manual para estudiante ${dto.studentId}, carrera ${dto.careerCode}`);
+
     const history = await this.progressService.getAcademicHistory(dto.studentId);
     const curriculum = await this.curriculumService.getCurriculum(dto.careerCode);
     
@@ -18,9 +21,13 @@ export class SimulationService {
     const simulatedApproved = new Set(history.approved);
     
     let totalCreditsPerSemester: { semester: string; credits: number }[] = []; // Tarea 3
+
+    logger.debug(`[SimulationService] Plan manual recibido: ${dto.manualPlan.length} semestres`);
     
     //validar el plan manual
     for (const semester of dto.manualPlan) {
+      logger.info(`[SimulationService] Validando semestre ${semester.period}-${semester.year} (${semester.courses.length} cursos)`);
+
       const validationResult = await this.validateSemester(
         semester,
         curriculum,
@@ -30,6 +37,7 @@ export class SimulationService {
       );
 
       if (!validationResult.isValid) {
+        logger.error(`[SimulationService] Error en ${semester.period} ${semester.year}: ${validationResult.error}`);
         throw new BadRequestException(`Error en ${semester.period} ${semester.year}: ${validationResult.error}`);
       }
 
@@ -39,7 +47,10 @@ export class SimulationService {
         semester: `${semester.period}-${semester.year}`,
         credits: validationResult.semesterCredits, 
       });
+      logger.debug(`[SimulationService] Semestre válido: ${semester.period}-${semester.year} (${validationResult.semesterCredits} créditos)`);
     }
+
+    logger.info(`[SimulationService] Generando proyección automática para ramos restantes...`);
 
     //calcular el resto de la carrera (la proyeccion)
 
@@ -51,11 +62,12 @@ export class SimulationService {
       `${fullPlan[fullPlan.length - 1].period} ${fullPlan[fullPlan.length - 1].year}` :
       'Ya egresado';
 
+    logger.info(`[SimulationService] Proyección generada. Fecha estimada de egreso: ${estimatedGraduation}`);
+
     return {
       estimatedGraduation,
       totalCreditsPerSemester, 
       fullPlan, 
-     
       approvedCourses: Array.from(simulatedApproved),
       pendingCourses: futurePlan.pending,
     };
@@ -69,18 +81,23 @@ export class SimulationService {
     failedSoFar: Set<string>,
     maxCredits: number,
   ): Promise<{ isValid: boolean; error?: string; semesterCredits: number }> {
+
+    logger.debug(`[SimulationService] Validando reglas para semestre ${semester.period}-${semester.year}`);
     
     let semesterCredits = 0;
 
     for (const courseCode of semester.courses) {
       const course = curriculum.courses.get(courseCode);
+
       if (!course) {
+        logger.warn(`[SimulationService] Ramo no encontrado: ${courseCode}`);
         return { isValid: false, error: `Ramo ${courseCode} no existe.`, semesterCredits: 0 };
       }
 
       
       for (const preCode of course.prerequisites) {
         if (!approvedSoFar.has(preCode)) {
+          logger.warn(`[SimulationService] Prerrequisito faltante ${preCode} para ${courseCode}`);
           return { isValid: false, error: `Falta prerrequisito ${preCode} para ${courseCode}.`, semesterCredits: 0 };
         }
       }

@@ -2,6 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { CurriculumService } from '../curriculum/curriculum.service';
 import { CreateProgressDto } from './dto/create-progress.dto';
 import { UpdateProgressDto } from './dto/update-progress.dto';
+import { logger } from '../common/logger/logger'
 
 export interface AcademicHistory {
   approved: Set<string>; // Códigos de ramos aprobados
@@ -20,7 +21,7 @@ export class ProgressService {
   constructor(
     private readonly curriculumService: CurriculumService
   ) {
-   
+    logger.info('[ProgressService] Inicializando servicio...');
     this.studentHistoryDB.set('student-123', {
       approved: new Set(['MAT001', 'PRG001']),
       failed: new Set(['FIS001']),
@@ -33,6 +34,7 @@ export class ProgressService {
    * @returns A promise that resolves to an AcademicHistory object containing the student's approved and failed courses
    */
   async getAcademicHistory(studentId: string): Promise<AcademicHistory> {
+    logger.info(`[ProgressService] Obteniendo historial académico de ${studentId}`);
     return this.studentHistoryDB.get(studentId) || { approved: new Set(), failed: new Set() };
   }
 
@@ -53,6 +55,7 @@ export class ProgressService {
    */
   async setAcademicHistory(studentId: string, approved: string[], failed: string[]) {
     // Simula guardar en DB
+    logger.info(`[ProgressService] Guardando historial(simulado) para ${studentId}`);
     this.studentHistoryDB.set(studentId, {
       approved: new Set(approved),
       failed: new Set(failed),
@@ -73,12 +76,15 @@ export class ProgressService {
    * // Returns: ['CS101', 'MATH201', 'ENG150']
    */
   async getPendingCourses(studentId: string, careerCode: string): Promise<string[]> {
+    logger.info(`[ProgressService] Calculando cursos pendientes de ${studentId} para la carrera ${careerCode}`);
     const history = await this.getAcademicHistory(studentId);
     const curriculum = await this.curriculumService.getCurriculum(careerCode);
     
     const allCourseCodes = Array.from(curriculum.courses.keys());
     
     const pending = allCourseCodes.filter(code => !history.approved.has(code));
+
+    logger.debug(`[ProgressService] Pendientes encontrados para ${studentId}: ${pending.join(', ') || 'ninguno'}`);
     return pending;
   }
 
@@ -89,8 +95,12 @@ export class ProgressService {
    * @throws {NotFoundException} If the student with the given ID is not found.
    */
   async getStudentProgress(studentId: string) {
+    logger.info(`[ProgressService] Consultando progreso del estudiante ${studentId}`);
     const student = await this.studentService.findById(studentId);
-    if (!student) throw new NotFoundException('Estudiante no encontrado');
+    if (!student) {
+      logger.warn(`[ProgressService] Estudiante no encontrado: ${studentId}`);
+      throw new NotFoundException('Estudiante no encontrado');
+    }
 
     return this.progressRepo.find({
       where: { student: { id: studentId } },
@@ -105,14 +115,20 @@ export class ProgressService {
      * @returns A promise that resolves to the created progress entity
      * @throws {NotFoundException} When the student with the given ID is not found
      */
-    async createProgress(studentId: string, dto: CreateProgressDto) {
+  async createProgress(studentId: string, dto: CreateProgressDto) {
+    logger.info(`[ProgressService] Creando registro de progreso para ${studentId}`);
     const student = await this.studentService.findById(studentId);
-    if (!student) throw new NotFoundException('Estudiante no encontrado');
+    if (!student) {
+     logger.error(`[ProgressService] Error al crear progreso: estudiante ${studentId} no existe`);      
+      throw new NotFoundException('Estudiante no encontrado');
+    }
 
     const progress = this.progressRepo.create({
       student,
       ...dto,
     });
+
+    logger.debug(`[ProgressService] Datos para crear progreso: ${JSON.stringify(dto)}`);
 
     return this.progressRepo.save(progress);
   }
@@ -125,10 +141,18 @@ export class ProgressService {
    * @throws {NotFoundException} When the progress record with the given id is not found
    */
   async updateProgress(id: string, dto: UpdateProgressDto) {
+    logger.info(`[ProgressService] Actualizando progreso con id ${id}`);
     const exist = await this.progressRepo.findOne({ where: { id } });
-    if (!exist) throw new NotFoundException('Registro no encontrado');
+
+    if (!exist) {
+      logger.warn(`[ProgressService] Registro no encontrado: ${id}`);
+      throw new NotFoundException('Registro no encontrado');
+    }
 
     Object.assign(exist, dto);
+
+    logger.debug(`[ProgressService] Datos actualizados: ${JSON.stringify(dto)}`);
+
     return this.progressRepo.save(exist);
   }
 
@@ -138,10 +162,11 @@ export class ProgressService {
    * @returns A promise that resolves to an array of progress records for the specified student
    */
   async getProgressSecure(studentId: string) {
-  return this.progressRepo
-    .createQueryBuilder('p')
-    .where('p.studentId = :id', { id: studentId }) // Query parametrizada
-    .getMany();
-}
+    logger.info(`[ProgressService] Ejecutando consulta segura para estudiante ${studentId}`);
+    return this.progressRepo
+      .createQueryBuilder('p')
+      .where('p.studentId = :id', { id: studentId }) // Query parametrizada
+      .getMany();
+  }
 
 }
